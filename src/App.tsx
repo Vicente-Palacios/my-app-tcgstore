@@ -1,297 +1,227 @@
 import { useAuth } from "react-oidc-context";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { Card, CardInput } from "./types";
+import { createCard, deleteCard, fetchCards, updateCard } from "./api/cardsApi";
+import AuthShell from "./components/AuthShell";
+import { LoginError, LoginLoading, LoginPanel } from "./components/LoginPanel";
+import TopBar from "./components/TopBar";
+import CardGrid from "./components/CardGrid";
+import CardFormPanel from "./components/CardFormPanel";
+import { colors, fonts, radius } from "./theme";
 
 function App() {
   const auth = useAuth();
-  const [apiResponse, setApiResponse] = useState<string>("");
-  const [loadingApi, setLoadingApi] = useState<boolean>(false);
 
-  // 1. Estados de carga y error del flujo de Cognito
+  const [cards, setCards] = useState<Card[]>([]);
+  const [loadingCards, setLoadingCards] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [editingCard, setEditingCard] = useState<Card | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const roles = (auth.user?.profile["cognito:groups"] as string[]) || [];
+  const canEdit = roles.includes("Admin") || roles.includes("Colaborador");
+  const canDelete = roles.includes("Admin");
+  const token = auth.user?.id_token;
+
+  useEffect(() => {
+    if (!auth.isAuthenticated || !token) return;
+
+    setLoadingCards(true);
+    setLoadError(null);
+
+    fetchCards(token)
+      .then(setCards)
+      .catch((error: Error) => setLoadError(error.message))
+      .finally(() => setLoadingCards(false));
+  }, [auth.isAuthenticated, token]);
+
   if (auth.isLoading) {
     return (
-      <div style={styles.centerContainer}>
-        <h3>Cargando sesión de usuario...</h3>
-      </div>
+      <AuthShell>
+        <LoginLoading />
+      </AuthShell>
     );
   }
 
-  // Validación correcta para TypeScript usando la propiedad nativa 'error'
   if (auth.error) {
     return (
-      <div style={styles.centerContainer}>
-        <div style={styles.loginCard}>
-          <h3 style={{ color: "#ff4d4f" }}>Error al autenticar</h3>
-          <p style={{ color: "#666" }}>{auth.error.message}</p>
-          <button
-            onClick={() => auth.signinRedirect()}
-            style={styles.loginButton}
-          >
-            Reintentar
-          </button>
-        </div>
-      </div>
+      <AuthShell>
+        <LoginError
+          message={auth.error.message}
+          onRetry={() => auth.signinRedirect()}
+        />
+      </AuthShell>
     );
   }
 
-  // 2. Vista si el usuario ya inició sesión de manera exitosa
-  if (auth.isAuthenticated) {
-    // Extraer de forma segura la lista de grupos (roles) inyectados por Cognito
-    const roles = (auth.user?.profile["cognito:groups"] as string[]) || [];
-    const email = auth.user?.profile.email;
-
-    // Función para consumir tus controladores de Spring Boot pasando por API Gateway
-    const consultarBackend = async (
-      endpoint: string,
-      metodo: string = "GET",
-    ) => {
-      setLoadingApi(true);
-      setApiResponse("");
-
-      try {
-        // Extraemos el id_token que exige el Authorizer de Cognito en API Gateway
-        const token = auth.user?.id_token;
-
-        if (!token) {
-          setApiResponse("Error: No hay un token de sesión activo.");
-          setLoadingApi(false);
-          return;
-        }
-
-        // Reemplaza esta URL con la URL pública exacta de tu API Gateway
-        const apiGatewayUrl =
-          "https://djdjslqucb.execute-api.us-east-1.amazonaws.com";
-
-        const response = await fetch(`${apiGatewayUrl}${endpoint}`, {
-          method: metodo,
-          headers: {
-            // El API Gateway validará este header contra su Authorizer de Cognito
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        });
-
-        const data = await response.json();
-
-        // Mostramos el resultado formateado en la caja de respuesta
-        setApiResponse(JSON.stringify(data, null, 2));
-      } catch (error: any) {
-        setApiResponse(`Error de red o conexión: ${error.message}`);
-      } finally {
-        setLoadingApi(false);
-      }
-    };
-
+  if (!auth.isAuthenticated) {
     return (
-      <div style={styles.dashboardContainer}>
-        <header style={styles.header}>
-          <h2>🚀 Sistema Control de Acceso SPA</h2>
-          <button onClick={() => auth.removeUser()} style={styles.logoutButton}>
-            Cerrar Sesión
-          </button>
-        </header>
-
-        <main style={styles.main}>
-          <section style={styles.card}>
-            <h3>Perfil del Usuario</h3>
-            <p>
-              📧 <strong>Email:</strong> {email}
-            </p>
-            <p>
-              🔑 <strong>Roles Asignados:</strong>{" "}
-              {roles.length > 0 ? (
-                roles.map((r) => (
-                  <span key={r} style={styles.badge}>
-                    {r}
-                  </span>
-                ))
-              ) : (
-                <span style={styles.noneBadge}>Ninguno</span>
-              )}
-            </p>
-          </section>
-
-          {/* VISTAS CONDICIONALES EN FRONTEND SEGÚN EL ROL */}
-          {roles.includes("Admin") && (
-            <section style={{ ...styles.card, borderColor: "#ff4d4f" }}>
-              <h4 style={{ color: "#ff4d4f", margin: 0 }}>
-                ⚙️ Panel de Control - Exclusivo Admin
-              </h4>
-              <p style={{ fontSize: "14px", color: "#666" }}>
-                Esta sección solo la puedes renderizar tú porque perteneces al
-                grupo Admin en AWS.
-              </p>
-            </section>
-          )}
-
-          <section style={styles.card}>
-            <h3>
-              Interactuar con Backend (Spring Boot a través de API Gateway)
-            </h3>
-            <p style={{ fontSize: "14px", color: "#555" }}>
-              Prueba los endpoints protegidos con tu anotación{" "}
-              <code>@SecuredRoles</code>:
-            </p>
-
-            <div style={styles.buttonGroup}>
-              <button
-                onClick={() => consultarBackend("/health", "GET")}
-                style={styles.apiButton}
-              >
-                Ver Estado del Backend (Cualquier Rol)
-              </button>
-
-              <button
-                onClick={() => consultarBackend("/api/productos", "POST")}
-                style={styles.apiButton}
-              >
-                Crear Producto (Admin/Colaborador)
-              </button>
-
-              <button
-                onClick={() => consultarBackend("/api/productos/1", "DELETE")}
-                style={{ ...styles.apiButton, backgroundColor: "#d9383a" }}
-              >
-                Eliminar Producto (Solo Admin)
-              </button>
-            </div>
-
-            <div style={styles.responseBox}>
-              <strong>Respuesta del Servidor:</strong>
-              <pre>
-                {loadingApi
-                  ? "Consultando pasarela de AWS..."
-                  : apiResponse || "Ninguna petición enviada aún."}
-              </pre>
-            </div>
-          </section>
-        </main>
-      </div>
+      <AuthShell>
+        <LoginPanel onSignIn={() => auth.signinRedirect()} />
+      </AuthShell>
     );
   }
 
-  // 3. Vista inicial si el usuario no está logueado
+  function openCreatePanel() {
+    setEditingCard(null);
+    setFormError(null);
+    setPanelOpen(true);
+  }
+
+  function openEditPanel(card: Card) {
+    setEditingCard(card);
+    setFormError(null);
+    setPanelOpen(true);
+  }
+
+  async function handleSubmit(data: CardInput) {
+    if (!token) return;
+    setSubmitting(true);
+    setFormError(null);
+
+    try {
+      if (editingCard) {
+        const updated = await updateCard(token, editingCard.id, data);
+        setCards((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+      } else {
+        const created = await createCard(token, data);
+        setCards((prev) => [...prev, created]);
+      }
+      setPanelOpen(false);
+    } catch (error) {
+      setFormError((error as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDelete(card: Card) {
+    if (!token) return;
+    const previous = cards;
+    // Actualización optimista: la quitamos de la vista y revertimos si falla
+    setCards((prev) => prev.filter((c) => c.id !== card.id));
+
+    try {
+      await deleteCard(token, card.id);
+    } catch (error) {
+      setCards(previous);
+      setLoadError((error as Error).message);
+    }
+  }
+
+  const email = auth.user?.profile.email as string | undefined;
+
   return (
-    <div style={styles.centerContainer}>
-      <div style={styles.loginCard}>
-        <h2>🔐 Inicio de Sesión</h2>
-        <p style={{ color: "#666", marginBottom: "20px" }}>
-          Ingresa a la SPA utilizando el Directorio de Usuarios de AWS Cognito.
-        </p>
-        <button
-          onClick={() => auth.signinRedirect()}
-          style={styles.loginButton}
-        >
-          Ingresar con Cognito (Hosted UI)
-        </button>
-      </div>
+    <div style={styles.page}>
+      <TopBar email={email} roles={roles} onLogout={() => auth.removeUser()} />
+
+      <main style={styles.main}>
+        <div style={styles.headerRow}>
+          <div>
+            <h1 style={styles.pageTitle}>Inventario de cartas</h1>
+            <p style={styles.pageSubtitle}>
+              {loadingCards
+                ? "Cargando catálogo…"
+                : `${cards.length} ${cards.length === 1 ? "carta registrada" : "cartas registradas"}`}
+            </p>
+          </div>
+          {canEdit && (
+            <button style={styles.addButton} onClick={openCreatePanel}>
+              Nueva carta
+            </button>
+          )}
+        </div>
+
+        {!canEdit && (
+          <p style={styles.readOnlyNote}>
+            Tu cuenta tiene acceso de solo lectura. Pide a un Admin o
+            Colaborador que te asigne permisos de edición.
+          </p>
+        )}
+
+        {loadError && <p style={styles.errorBanner}>{loadError}</p>}
+
+        <CardGrid
+          cards={cards}
+          canEdit={canEdit}
+          canDelete={canDelete}
+          onEdit={openEditPanel}
+          onDelete={handleDelete}
+        />
+      </main>
+
+      <CardFormPanel
+        open={panelOpen}
+        initialCard={editingCard}
+        submitting={submitting}
+        errorMessage={formError}
+        onClose={() => setPanelOpen(false)}
+        onSubmit={handleSubmit}
+      />
     </div>
   );
 }
 
-// 🎨 Estilos básicos en línea para mantener el archivo autocontenido y limpio
-const styles = {
-  centerContainer: {
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    height: "100vh",
-    backgroundColor: "#f0f2f5",
-    fontFamily: "sans-serif",
-  },
-  loginCard: {
-    padding: "40px",
-    backgroundColor: "#fff",
-    borderRadius: "8px",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-    textAlign: "center" as const,
-    maxWidth: "400px",
-  },
-  loginButton: {
-    backgroundColor: "#1677ff",
-    color: "#fff",
-    border: "none",
-    padding: "12px 24px",
-    fontSize: "16px",
-    borderRadius: "6px",
-    cursor: "pointer",
-    width: "100%",
-    fontWeight: "bold" as const,
-  },
-  dashboardContainer: {
-    fontFamily: "sans-serif",
-    backgroundColor: "#f9fbfd",
+const styles: Record<string, React.CSSProperties> = {
+  page: {
     minHeight: "100vh",
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "10px 40px",
-    backgroundColor: "#001529",
-    color: "#fff",
-  },
-  logoutButton: {
-    backgroundColor: "transparent",
-    color: "#rgba(255,255,255,0.65)",
-    border: "1px solid #434343",
-    padding: "8px 16px",
-    borderRadius: "4px",
-    cursor: "pointer",
+    background: colors.mat,
+    fontFamily: fonts.body,
   },
   main: {
-    padding: "40px",
-    maxWidth: "800px",
+    maxWidth: "1100px",
     margin: "0 auto",
+    padding: "36px 32px 64px",
+  },
+  headerRow: {
     display: "flex",
-    flexDirection: "column" as const,
-    gap: "20px",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    marginBottom: "20px",
+    flexWrap: "wrap",
+    gap: "14px",
   },
-  card: {
-    backgroundColor: "#fff",
-    padding: "20px",
-    borderRadius: "8px",
-    border: "1px solid #f0f0f0",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
+  pageTitle: {
+    fontFamily: fonts.display,
+    fontSize: "28px",
+    color: colors.onMat,
+    margin: "0 0 4px",
+    fontWeight: 600,
   },
-  badge: {
-    backgroundColor: "#e6f4ff",
-    color: "#0958d9",
-    padding: "4px 10px",
-    borderRadius: "4px",
-    marginRight: "6px",
-    fontSize: "14px",
-    fontWeight: "bold" as const,
+  pageSubtitle: {
+    fontSize: "13px",
+    color: colors.onMatMuted,
+    margin: 0,
   },
-  noneBadge: {
-    color: "#bfbfbf",
-    fontStyle: "italic",
-  },
-  buttonGroup: {
-    display: "flex",
-    gap: "10px",
-    flexWrap: "wrap" as const,
-    marginTop: "15px",
-  },
-  apiButton: {
-    backgroundColor: "#52c41a",
-    color: "#fff",
+  addButton: {
+    padding: "12px 20px",
+    borderRadius: radius.md,
     border: "none",
-    padding: "10px 16px",
-    borderRadius: "4px",
+    background: colors.gold,
+    color: colors.ink,
+    fontWeight: 600,
+    fontSize: "14px",
     cursor: "pointer",
-    fontWeight: "600" as const,
   },
-  responseBox: {
-    marginTop: "20px",
-    padding: "15px",
-    backgroundColor: "#141414",
-    color: "#a9fe14",
-    borderRadius: "6px",
-    overflowX: "auto" as const,
+  readOnlyNote: {
+    fontSize: "13px",
+    color: colors.onMatMuted,
+    background: "rgba(244, 241, 228, 0.06)",
+    border: `1px solid ${colors.matLine}`,
+    borderRadius: radius.md,
+    padding: "12px 16px",
+    marginBottom: "20px",
   },
-  button: {
-    padding: "8px 16px",
-    cursor: "pointer",
+  errorBanner: {
+    fontSize: "13px",
+    color: "#fff",
+    background: colors.rubyStrong,
+    borderRadius: radius.md,
+    padding: "12px 16px",
+    marginBottom: "20px",
   },
 };
 
