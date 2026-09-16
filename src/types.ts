@@ -8,6 +8,7 @@ export interface Card {
   condition: string;
   price: number;
   stock: number;
+  imageUrl?: string;
 }
 
 // Coincide con CardRequestDto del backend (cards/dto/CardRequestDto.java)

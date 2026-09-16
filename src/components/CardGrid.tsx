@@ -9,6 +9,7 @@ interface CardGridProps {
   canDelete: boolean;
   onEdit: (card: Card) => void;
   onDelete: (card: Card) => void;
+  onAddToCart?: (card: Card) => void;
 }
 
 export default function CardGrid({
@@ -17,6 +18,7 @@ export default function CardGrid({
   canDelete,
   onEdit,
   onDelete,
+  onAddToCart,
 }: CardGridProps) {
   const [search, setSearch] = useState("");
   const [gameFilter, setGameFilter] = useState<string>("Todos");
@@ -85,6 +87,7 @@ export default function CardGrid({
               onEdit={() => onEdit(card)}
               onRequestDelete={() => setConfirmingId(card.id)}
               onCancelDelete={() => setConfirmingId(null)}
+              onAddToCart={onAddToCart ? () => onAddToCart(card) : undefined}
               onConfirmDelete={() => {
                 setConfirmingId(null);
                 onDelete(card);
