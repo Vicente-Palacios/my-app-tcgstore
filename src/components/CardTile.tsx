@@ -10,6 +10,7 @@ interface CardTileProps {
   onRequestDelete: () => void;
   onConfirmDelete: () => void;
   onCancelDelete: () => void;
+  onAddToCart?: () => void;
 }
 
 const currencyFormatter = new Intl.NumberFormat("es-CL", {
@@ -27,6 +28,7 @@ export default function CardTile({
   onRequestDelete,
   onConfirmDelete,
   onCancelDelete,
+  onAddToCart,
 }: CardTileProps) {
   const lowStock = card.stock <= 2;
 
@@ -35,6 +37,17 @@ export default function CardTile({
       <div style={{ ...styles.accentBar, background: rarityAccent(card.rarity) }} />
 
       <div style={styles.body}>
+        {card.imageUrl && (
+          <img
+            src={card.imageUrl}
+            alt={card.name}
+            style={styles.image}
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.display = "none";
+            }}
+          />
+        )}
+
         <div style={styles.headerRow}>
           <h3 style={styles.name}>{card.name}</h3>
           <span style={styles.rarityPill}>{card.rarity}</span>
@@ -51,6 +64,12 @@ export default function CardTile({
             {card.stock} {card.stock === 1 ? "unidad" : "unidades"}
           </span>
         </div>
+
+        {onAddToCart && (
+          <button style={styles.cartButton} onClick={onAddToCart}>
+            Agregar al carrito
+          </button>
+        )}
 
         {(canEdit || canDelete) && (
           <div style={styles.actionsRow}>
@@ -110,6 +129,25 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "space-between",
     alignItems: "flex-start",
     gap: "10px",
+  },
+  image: {
+    width: "100%",
+    height: "140px",
+    objectFit: "cover",
+    borderRadius: radius.md,
+    marginBottom: "4px",
+  },
+  cartButton: {
+    fontSize: "12px",
+    padding: "9px 14px",
+    borderRadius: radius.md,
+    border: "none",
+    background: colors.gold,
+    color: colors.ink,
+    fontWeight: 600,
+    cursor: "pointer",
+    marginTop: "10px",
+    width: "100%",
   },
   name: {
     fontFamily: fonts.display,
