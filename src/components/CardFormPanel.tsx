@@ -20,6 +20,7 @@ const emptyForm: CardInput = {
   condition: CONDITIONS[1],
   price: 0,
   stock: 0,
+  imageUrl: "",
 };
 
 export default function CardFormPanel({
@@ -144,6 +145,17 @@ export default function CardFormPanel({
                 </option>
               ))}
             </select>
+          </label>
+
+          <label style={styles.label}>
+            URL de la imagen (opcional)
+            <input
+              style={styles.input}
+              type="url"
+              value={form.imageUrl ?? ""}
+              onChange={(e) => update("imageUrl", e.target.value)}
+              placeholder="https://…"
+            />
           </label>
 
           <div style={styles.row}>
